@@ -22,6 +22,192 @@ module.exports = webpackEmptyContext;
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
+/***/ 5915:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require2_) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+const action = __importStar(__nccwpck_require2_(7484));
+const testflight_1 = __nccwpck_require2_(1852);
+async function run() {
+    try {
+        const appId = action.getInput('app-id');
+        const platform = action.getInput('platform');
+        const projectPath = action.getInput('project-path');
+        const apiKeyId = action.getInput('api-key-id');
+        const apiPrivateKey = action.getInput('api-private-key');
+        const issuerId = action.getInput('issuer-id');
+        const version = new testflight_1.Version(apiPrivateKey, issuerId, apiKeyId);
+        const currentBuildId = await version.buildNumber(appId, platform, projectPath);
+        action.setOutput('build-number', `${currentBuildId}`);
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            action.setFailed(error.message);
+        }
+    }
+}
+run();
+
+
+/***/ }),
+
+/***/ 1852:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require2_) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Version = void 0;
+// Import the API version from the package, which mirror Apple's API versioning
+const appstoreconnect_1 = __nccwpck_require2_(7407);
+const fs_1 = __importDefault(__nccwpck_require2_(9896));
+// Initialize the service. Passing the token up-front is optional, but should be done before any API calls are made.
+// Compare to https://developer.apple.com/documentation/appstoreconnectapi/list_builds
+class Version {
+    api = null;
+    constructor(privateKey, issuerId, keyId) {
+        const token = appstoreconnect_1.v1.token(privateKey, issuerId, keyId);
+        this.api = (0, appstoreconnect_1.v1)(token);
+    }
+    getLatestAppVersionId = async (appId, platform) => {
+        if (!this.api) {
+            throw new Error('API not initialized');
+        }
+        return new Promise((resolve, reject) => {
+            appstoreconnect_1.v1.testflight
+                .listPrereleaseVersions(this.api, {
+                filter: {
+                    app: [appId],
+                    platform: [platform],
+                },
+                sort: ['-version'], // Sort by version descending
+            })
+                .then(prereleaseVersions => {
+                if (prereleaseVersions.data.length > 0) {
+                    const latestVersion = prereleaseVersions.data[0];
+                    resolve(latestVersion.id);
+                }
+                else {
+                    reject('No prerelease versions found.');
+                }
+            })
+                .catch(err => {
+                console.error('Error fetching prerelease versions:', err);
+                reject(err);
+            });
+        });
+    };
+    getLatestBuildId = async (prereleaseVersionId) => {
+        if (!this.api) {
+            throw new Error('API not initialized');
+        }
+        return new Promise((resolve, reject) => {
+            appstoreconnect_1.v1
+                .testflight
+                .listBuilds(this.api, {
+                fields: {
+                    apps: ['name'],
+                },
+                include: ['betaBuildLocalizations'],
+                filter: {
+                    preReleaseVersion: [prereleaseVersionId],
+                },
+                sort: ['-version'], // Sort by uploadedDate descending
+                limit: {
+                    betaBuildLocalizations: 40,
+                }
+            })
+                .then(builds => {
+                if (builds.data.length > 0) {
+                    const versions = builds.data.map(build => build.attributes?.version || '0')
+                        .filter(v => /^\d+$/.test(v))
+                        .sort((a, b) => parseInt(b) - parseInt(a));
+                    const invalid_version_len = builds.data.length - versions.length;
+                    let valid_version = versions.shift();
+                    let version = `${parseInt(valid_version || '0') + invalid_version_len}`;
+                    if (version) {
+                        resolve(version);
+                    }
+                    else {
+                        reject('No version found for the latest build.');
+                    }
+                }
+                else {
+                    reject('No builds found for the specified prerelease version.');
+                }
+            })
+                .catch(err => {
+                console.error('Error fetching builds:', err);
+                reject(err);
+            });
+        });
+    };
+    buildNumber = async (appId, platform, projectFilePath) => {
+        let latestVersionId = await this.getLatestAppVersionId(appId, platform);
+        if (!latestVersionId) {
+            console.error('No latest version ID found.');
+            return;
+        }
+        console.log(`Latest version ID: ${latestVersionId}`);
+        let latestBuildId = await this.getLatestBuildId(latestVersionId);
+        console.log(`Latest build ID: ${latestBuildId}`);
+        let nextBuildNumber = parseInt(latestBuildId) + 1;
+        console.log(`Next build number: ${nextBuildNumber}`);
+        if (projectFilePath === '') {
+            return latestBuildId;
+        }
+        // Update the build number in the Xcode project file
+        const configFilePath = projectFilePath + '/project.pbxproj';
+        const configFile = fs_1.default.readFileSync(configFilePath, 'utf8');
+        const newConfigFile = configFile.replace(/CURRENT_PROJECT_VERSION = \d+;/g, `CURRENT_PROJECT_VERSION = ${nextBuildNumber};`);
+        fs_1.default.writeFileSync(configFilePath, newConfigFile, 'utf8');
+        console.log(`Updated build number to ${nextBuildNumber} in ${configFilePath}`);
+        return latestBuildId;
+    };
+}
+exports.Version = Version;
+
+
+/***/ }),
+
 /***/ 4914:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require2_) {
 
@@ -47433,190 +47619,6 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
-/***/ 1730:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require2_) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-const action = __importStar(__nccwpck_require2_(7484));
-const testflight_1 = __nccwpck_require2_(5713);
-async function run() {
-    try {
-        const appId = action.getInput('app-id');
-        const platform = action.getInput('platform');
-        const projectPath = action.getInput('project-path');
-        const apiKeyId = action.getInput('api-key-id');
-        const apiPrivateKey = action.getInput('api-private-key');
-        const issuerId = action.getInput('issuer-id');
-        const version = new testflight_1.Version(apiPrivateKey, issuerId, apiKeyId);
-        const currentBuildId = await version.buildNumber(appId, platform, projectPath);
-        action.setOutput('build-number', `${currentBuildId}`);
-    }
-    catch (error) {
-        if (error instanceof Error) {
-            action.setFailed(error.message);
-        }
-    }
-}
-run();
-
-
-/***/ }),
-
-/***/ 5713:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require2_) {
-
-"use strict";
-
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Version = void 0;
-// Import the API version from the package, which mirror Apple's API versioning
-const appstoreconnect_1 = __nccwpck_require2_(7407);
-const fs_1 = __importDefault(__nccwpck_require2_(9896));
-// Initialize the service. Passing the token up-front is optional, but should be done before any API calls are made.
-// Compare to https://developer.apple.com/documentation/appstoreconnectapi/list_builds
-class Version {
-    api = null;
-    constructor(privateKey, issuerId, keyId) {
-        const token = appstoreconnect_1.v1.token(privateKey, issuerId, keyId);
-        this.api = (0, appstoreconnect_1.v1)(token);
-    }
-    getLatestAppVersionId = async (appId, platform) => {
-        if (!this.api) {
-            throw new Error('API not initialized');
-        }
-        return new Promise((resolve, reject) => {
-            appstoreconnect_1.v1.testflight
-                .listPrereleaseVersions(this.api, {
-                filter: {
-                    app: [appId],
-                    platform: [platform],
-                },
-                sort: ['-version'], // Sort by version descending
-            })
-                .then(prereleaseVersions => {
-                if (prereleaseVersions.data.length > 0) {
-                    const latestVersion = prereleaseVersions.data[0];
-                    resolve(latestVersion.id);
-                }
-                else {
-                    reject('No prerelease versions found.');
-                }
-            })
-                .catch(err => {
-                console.error('Error fetching prerelease versions:', err);
-                reject(err);
-            });
-        });
-    };
-    getLatestBuildId = async (prereleaseVersionId) => {
-        if (!this.api) {
-            throw new Error('API not initialized');
-        }
-        return new Promise((resolve, reject) => {
-            appstoreconnect_1.v1
-                .testflight
-                .listBuilds(this.api, {
-                fields: {
-                    apps: ['name'],
-                    builds: [
-                        'version', // Include version field
-                    ]
-                },
-                filter: {
-                    preReleaseVersion: [prereleaseVersionId],
-                },
-                sort: ['-version'], // Sort by uploadedDate descending
-                limit: {
-                    betaBuildLocalizations: 40
-                }
-            })
-                .then(builds => {
-                if (builds.data.length > 0) {
-                    const latestBuild = builds.data[0];
-                    let version = latestBuild.attributes?.version;
-                    if (version) {
-                        resolve(version);
-                    }
-                    else {
-                        reject('No version found for the latest build.');
-                    }
-                }
-                else {
-                    reject('No builds found for the specified prerelease version.');
-                }
-            })
-                .catch(err => {
-                console.error('Error fetching builds:', err);
-                reject(err);
-            });
-        });
-    };
-    buildNumber = async (appId, platform, projectFilePath) => {
-        let latestVersionId = await this.getLatestAppVersionId(appId, platform);
-        if (!latestVersionId) {
-            console.error('No latest version ID found.');
-            return;
-        }
-        console.log(`Latest version ID: ${latestVersionId}`);
-        let latestBuildId = await this.getLatestBuildId(latestVersionId);
-        console.log(`Latest build ID: ${latestBuildId}`);
-        let nextBuildNumber = parseInt(latestBuildId) + 1;
-        console.log(`Next build number: ${nextBuildNumber}`);
-        if (projectFilePath === '') {
-            return latestBuildId;
-        }
-        // Update the build number in the Xcode project file
-        const configFilePath = projectFilePath + '/project.pbxproj';
-        const configFile = fs_1.default.readFileSync(configFilePath, 'utf8');
-        const newConfigFile = configFile.replace(/CURRENT_PROJECT_VERSION = \d+;/g, `CURRENT_PROJECT_VERSION = ${nextBuildNumber};`);
-        fs_1.default.writeFileSync(configFilePath, newConfigFile, 'utf8');
-        console.log(`Updated build number to ${nextBuildNumber} in ${configFilePath}`);
-        return latestBuildId;
-    };
-}
-exports.Version = Version;
-
-
-/***/ }),
-
 /***/ 2613:
 /***/ ((module) => {
 
@@ -49540,7 +49542,7 @@ module.exports = /*#__PURE__*/JSON.parse('{"name":"got","version":"9.6.0","descr
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __nested_webpack_exports__ = __nccwpck_require2_(1730);
+/******/ 	var __nested_webpack_exports__ = __nccwpck_require2_(5915);
 /******/ 	module.exports = __nested_webpack_exports__;
 /******/ 	
 /******/ })()
