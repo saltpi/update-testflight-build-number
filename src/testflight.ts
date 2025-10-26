@@ -1,6 +1,7 @@
 // Import the API version from the package, which mirror Apple's API versioning
 import { v1 } from 'appstoreconnect'
 import fs from 'fs'
+import { parse } from 'path';
 
 // Initialize the service. Passing the token up-front is optional, but should be done before any API calls are made.
 
@@ -57,22 +58,25 @@ export class Version {
         .listBuilds(this.api!, {
           fields: {
             apps: ['name'],
-            builds: [
-              'version', // Include version field
-            ]
           },
+          include: ['betaBuildLocalizations'],
           filter: {
             preReleaseVersion: [prereleaseVersionId],
           },
           sort: ['-version'], // Sort by uploadedDate descending
           limit: {
-            betaBuildLocalizations: 40
+            betaBuildLocalizations: 40,
           }
         })
         .then(builds => {
           if (builds.data.length > 0) {
-            const latestBuild = builds.data[0];
-            let version = latestBuild.attributes?.version;
+            const versions = builds.data.map(build => build.attributes?.version || '0')
+            .filter(v => /^\d+$/.test(v))
+            .sort((a, b) => parseInt(b) - parseInt(a));
+            const invalid_version_len = builds.data.length - versions.length;
+            
+            let valid_version = versions.shift();
+            let version = `${parseInt(valid_version || '0') + invalid_version_len}`;
             if (version) {
               resolve(version);
             } else {
