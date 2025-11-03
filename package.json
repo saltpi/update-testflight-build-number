@@ -28,7 +28,7 @@
   "license": "MIT",
   "dependencies": {
     "@actions/core": "~1.11.0",
-    "@actions/io": "~1.1.0",
+    "@actions/io": "~2.0.0",
     "appstoreconnect": "github:orj/appstoreconnect#release/v0.3.0"
   },
   "devDependencies": {
