@@ -25,6 +25,8 @@ inputs:
 outputs:
   build-number:
     description: 'The build number of the last build'
+  build-version:
+    description: 'The version of the last build'
 runs:
   using: 'node20'
   main: 'dist/index.js'

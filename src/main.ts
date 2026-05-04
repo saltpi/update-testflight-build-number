@@ -1,20 +1,25 @@
-import * as action from '@actions/core'
-import { Version } from './testflight'
+import {getInput, setFailed, setOutput} from '@actions/core'
+import {Version} from './testflight'
 
 async function run(): Promise<void> {
   try {
-    const appId: string = action.getInput('app-id')
-    const platform: string = action.getInput('platform')
-    const projectPath: string = action.getInput('project-path')
-    const apiKeyId = action.getInput('api-key-id')
-    const apiPrivateKey = action.getInput('api-private-key')
-    const issuerId = action.getInput('issuer-id')
+    const appId: string = getInput('app-id')
+    const platform: string = getInput('platform')
+    const projectPath: string = getInput('project-path')
+    const apiKeyId = getInput('api-key-id')
+    const apiPrivateKey = getInput('api-private-key')
+    const issuerId = getInput('issuer-id')
     const version = new Version(apiPrivateKey, issuerId, apiKeyId)
-    const currentBuildId = await version.buildNumber(appId, platform, projectPath)
-    action.setOutput('build-number', `${currentBuildId}`)
+    const currentBuild = await version.buildNumber(
+      appId,
+      platform,
+      projectPath
+    )
+    setOutput('build-number', currentBuild.buildNumber)
+    setOutput('build-version', currentBuild.buildVersion)
   } catch (error) {
     if (error instanceof Error) {
-      action.setFailed(error.message)
+      setFailed(error.message)
     }
   }
 }
