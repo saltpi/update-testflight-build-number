@@ -32,7 +32,7 @@
     "appstoreconnect": "github:orj/appstoreconnect#release/v0.3.0"
   },
   "devDependencies": {
-    "@types/node": "~20.17.0",
+    "@types/node": "~24.10.0",
     "@vercel/ncc": "~0.38.0",
     "eslint": "~9.23.0",
     "eslint-plugin-github": "~6.0.0",
